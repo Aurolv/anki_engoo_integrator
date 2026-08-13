@@ -1,9 +1,44 @@
-/*
-Engoo's pages are a SPA — the article HTML is empty, the data comes from their
-JSON API. The response is normalized: `data` is the lesson tree, `references`
-is a lookup table the tree points into via { "_ref": "ref:h:..." }. We inline
-every reference up front, so the rest of the code works with a plain tree.
-*/
+/**
+ * @fileoverview Client for Engoo's undocumented Daily News JSON API (found by
+ * inspecting the site's own network requests, not from published docs).
+ * Everything below was learned by sampling real responses, not from a spec,
+ * so it's recorded here rather than left implicit.
+ *
+ * **Endpoint**: `GET https://api.engoo.com/api/lessons/{lessonId}/current`,
+ * no auth required. `{lessonId}` is the UUID hidden in the article URL's
+ * last path segment, re-encoded as 22-char base64url see `parseLessonId`.
+ *
+ * **Shape**: normalized, not nested. The response is `{ data, references }`.
+ * `data` is the lesson tree; anywhere a value would repeat, it's replaced
+ * with `{ "_ref": "ref:h:<hash>" }` and the real object lives once in
+ * `references[hash]`. `inlineReferences` undoes this up front, so nothing
+ * past that point needs to know refs exist.
+ *
+ * **Two eras of lesson data** (cutover ~2019):
+ * - Old lessons inline the word and its example directly: `word` is `null`,
+ *   `local_word` holds the object, and the sentence link's `local_sentence`
+ *   holds the text.
+ * - New lessons reference a shared object instead: `word` is a `{ _ref }`
+ *   pointing to a `Word`, and the sentence link's `word_sentence` is a
+ *   `{ _ref }` to a `WordSentence` whose own `sentence` field is a further
+ *   `{ _ref }` to the actual `Sentence`.
+ * - A minority of lessons use a third shape, where the sentence link's
+ *   `global_sentence` is a `{ _ref }` straight to a `Sentence`.
+ *
+ * Dropping any one branch silently loses real vocabulary this file used to
+ * drop `local_word` and separately `global_sentence`, and each time lost
+ * real words or examples with no error, just fewer results than expected.
+ *
+ * **Field reliability**: `word`, `part_of_speech`, `definition`, and
+ * `title_text` have shown up on every lesson sampled so far. `sound.url`
+ * (→ `audioUrl`) is missing on lessons old enough to predate recorded audio.
+ * `example` is treated as optional below since nothing about the API
+ * guarantees it, even though no missing case has been observed yet.
+ *
+ * Undocumented, and the `as ApiLesson` cast below doesn't check any of it 
+ * a shape change won't throw, it'll just quietly return fewer words than
+ * the article has.
+ */
 
 import { stringify as stringifyUuid } from "uuid";
 
@@ -63,7 +98,7 @@ function parseLessonId(rawUrl: string): string {
   return stringifyUuid(bytes);
 }
 
-// Anything JSON.parse can produce — what the API payload is made of
+// Anything JSON.parse can produce  what the API payload is made of
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
 // Replaces every { _ref } with its object from `references`, recursively.
