@@ -1,0 +1,135 @@
+/*
+Engoo's pages are a SPA — the article HTML is empty, the data comes from their
+JSON API. The response is normalized: `data` is the lesson tree, `references`
+is a lookup table the tree points into via { "_ref": "ref:h:..." }. We inline
+every reference up front, so the rest of the code works with a plain tree.
+*/
+
+import { stringify as stringifyUuid } from "uuid";
+
+export interface EngooWord {
+  word: string;
+  partOfSpeech: string;
+  definition: string;
+  // Older lessons predate audio, and a handful of words ship without an example.
+  example: string | null;
+  audioUrl: string | null;
+}
+
+export interface EngooArticle {
+  title: string;
+  words: EngooWord[];
+}
+
+interface ApiWord {
+  word?: string;
+  part_of_speech?: string;
+  definition?: string;
+  sound?: { url?: string } | null;
+}
+
+// Which of these fields are set varies by lesson era (the API changed ~2019).
+interface ApiVocabWord {
+  word?: ApiWord | null;
+  local_word?: ApiWord | null;
+  vocab_section_word_sentences?: {
+    local_sentence?: { text?: string } | null;
+    global_sentence?: { text?: string } | null;
+    word_sentence?: { sentence?: { text?: string } | null } | null;
+  }[];
+}
+
+interface ApiLesson {
+  title_text?: { text?: string } | null;
+  exercises?: { sections?: { _type?: string; vocab_section_words?: ApiVocabWord[] }[] }[];
+}
+
+// The id in an article URL is a UUID in base64url decoded locally, no request
+function parseLessonId(rawUrl: string): string {
+  const url = new URL(rawUrl.trim());
+
+  if (url.hostname !== "engoo.com" && url.hostname !== "www.engoo.com") {
+    throw new Error(`Expected an engoo.com link, got ${url.hostname}`);
+  }
+
+  const id = url.pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const bytes = Buffer.from(id, "base64url");
+
+  // Buffer.from silently drops characters outside the alphabet, so re-encode to verify.
+  if (bytes.length !== 16 || bytes.toString("base64url") !== id) {
+    throw new Error("That link has no article id");
+  }
+
+  return stringifyUuid(bytes);
+}
+
+// Anything JSON.parse can produce — what the API payload is made of
+type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+
+// Replaces every { _ref } with its object from `references`, recursively.
+// Refs are content hashes, so they cannot form cycles.
+function inlineReferences(node: Json, references: Record<string, Json>): Json {
+  if (node === null || typeof node !== "object") return node;
+
+  if (Array.isArray(node)) {
+    return node.map((item) => inlineReferences(item, references));
+  }
+
+  if (typeof node._ref === "string") {
+    const referencedObject = references[node._ref];
+    return inlineReferences(referencedObject, references);
+  }
+
+  const inlinedEntries = Object.entries(node).map(([key, child]) => [key, inlineReferences(child, references)]);
+  return Object.fromEntries(inlinedEntries);
+}
+
+const clean = (value: string | undefined) => value?.trim() || null;
+
+function extractWord(entry: ApiVocabWord): EngooWord | null {
+  const source = entry.local_word ?? entry.word;
+  const word = clean(source?.word);
+  const partOfSpeech = clean(source?.part_of_speech);
+  const definition = clean(source?.definition);
+  // Guarantees the non-nullable EngooWord fields instead of just asserting them.
+  if (!source || !word || !partOfSpeech || !definition) return null;
+
+  const example = (entry.vocab_section_word_sentences ?? [])
+    .map((link) => link.local_sentence ?? link.global_sentence ?? link.word_sentence?.sentence)
+    .map((sentence) => clean(sentence?.text))
+    .find(Boolean);
+
+  return {
+    word,
+    partOfSpeech,
+    definition,
+    example: example ?? null,
+    audioUrl: clean(source.sound?.url),
+  };
+}
+
+export async function scrapeArticle(rawUrl: string): Promise<EngooArticle> {
+  const lessonId = parseLessonId(rawUrl);
+  const response = await fetch(`https://api.engoo.com/api/lessons/${lessonId}/current`, {
+    signal: AbortSignal.timeout(15_000),
+  });
+
+  if (!response.ok) throw new Error(`Engoo responded with status ${response.status}`);
+
+  const payload = (await response.json()) as { data: Json; references: Record<string, Json> };
+  const lesson = inlineReferences(payload.data, payload.references ?? {}) as ApiLesson;
+
+  const words = (lesson.exercises ?? [])
+    .flatMap((exercise) => exercise.sections ?? [])
+    // Sections are heterogeneous and ordered arbitrarily match on _type
+    .filter((section) => section._type === "VocabSection")
+    .flatMap((section) => section.vocab_section_words ?? [])
+    .map(extractWord)
+    .filter((word) => word !== null);
+
+  const title = clean(lesson.title_text?.text);
+  // Every lesson has one, so its absence means the payload isn't what we expect
+  if (!title) throw new Error("Lesson has no title");
+
+  return { title, words };
+}
