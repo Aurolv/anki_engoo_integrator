@@ -43,7 +43,7 @@
 import { stringify as stringifyUuid } from "uuid";
 
 export interface EngooWord {
-  word: string;
+  term: string;
   partOfSpeech: string;
   definition: string;
   // Older lessons predate audio, and a handful of words ship without an example.
@@ -79,7 +79,6 @@ interface ApiLesson {
   exercises?: { sections?: { _type?: string; vocab_section_words?: ApiVocabWord[] }[] }[];
 }
 
-// The id in an article URL is a UUID in base64url decoded locally, no request
 function parseLessonId(rawUrl: string): string {
   const url = new URL(rawUrl.trim());
 
@@ -119,27 +118,27 @@ function inlineReferences(node: Json, references: Record<string, Json>): Json {
   return Object.fromEntries(inlinedEntries);
 }
 
-const clean = (value: string | undefined) => value?.trim() || null;
+const trimmedOrNull = (value: string | undefined) => value?.trim() || null;
 
 function extractWord(entry: ApiVocabWord): EngooWord | null {
   const source = entry.local_word ?? entry.word;
-  const word = clean(source?.word);
-  const partOfSpeech = clean(source?.part_of_speech);
-  const definition = clean(source?.definition);
+  const term = trimmedOrNull(source?.word);
+  const partOfSpeech = trimmedOrNull(source?.part_of_speech);
+  const definition = trimmedOrNull(source?.definition);
   // Guarantees the non-nullable EngooWord fields instead of just asserting them.
-  if (!source || !word || !partOfSpeech || !definition) return null;
+  if (!source || !term || !partOfSpeech || !definition) return null;
 
   const example = (entry.vocab_section_word_sentences ?? [])
     .map((link) => link.local_sentence ?? link.global_sentence ?? link.word_sentence?.sentence)
-    .map((sentence) => clean(sentence?.text))
+    .map((sentence) => trimmedOrNull(sentence?.text))
     .find(Boolean);
 
   return {
-    word,
+    term,
     partOfSpeech,
     definition,
     example: example ?? null,
-    audioUrl: clean(source.sound?.url),
+    audioUrl: trimmedOrNull(source.sound?.url),
   };
 }
 
@@ -162,8 +161,7 @@ export async function scrapeArticle(rawUrl: string): Promise<EngooArticle> {
     .map(extractWord)
     .filter((word) => word !== null);
 
-  const title = clean(lesson.title_text?.text);
-  // Every lesson has one, so its absence means the payload isn't what we expect
+  const title = trimmedOrNull(lesson.title_text?.text);
   if (!title) throw new Error("Lesson has no title");
 
   return { title, words };

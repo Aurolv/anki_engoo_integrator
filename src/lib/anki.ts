@@ -38,7 +38,7 @@ const CARD_BACK = `
 const client = new YankiConnect();
 
 export interface AnkiWord {
-  word: string;
+  term: string;
   partOfSpeech: string;
   definition: string;
   example: string | null;
@@ -72,23 +72,24 @@ export async function addWordsToAnki(words: AnkiWord[]): Promise<AnkiImportResul
     await client.deck.createDeck({ deck: DECK_NAME });
     await ensureModelExists();
 
-    const notes = await Promise.all(
-      words.map(async (word) => {
-        const audioFilename = word.audioUrl ? await storeAudio(word.audioUrl) : null;
-        return {
-          deckName: DECK_NAME,
-          modelName: MODEL_NAME,
-          fields: {
-            Word: word.word,
-            PartOfSpeech: word.partOfSpeech,
-            Definition: word.definition,
-            Example: word.example ?? "",
-            Audio: audioFilename ? `[sound:${audioFilename}]` : "",
-          },
-          options: { allowDuplicate: false },
-        };
-      }),
-    );
+    // Sequential on purpose: AnkiConnect is single-threaded, and parallel downloads
+    // through it get their connections refused.
+    const notes = [];
+    for (const word of words) {
+      const audioFilename = word.audioUrl ? await storeAudio(word.audioUrl) : null;
+      notes.push({
+        deckName: DECK_NAME,
+        modelName: MODEL_NAME,
+        fields: {
+          Word: word.term,
+          PartOfSpeech: word.partOfSpeech,
+          Definition: word.definition,
+          Example: word.example ?? "",
+          Audio: audioFilename ? `[sound:${audioFilename}]` : "",
+        },
+        options: { allowDuplicate: false },
+      });
+    }
 
     const canAddByIndex = await client.note.canAddNotes({ notes });
     const addableNotes = notes.filter((_, index) => canAddByIndex[index]);
