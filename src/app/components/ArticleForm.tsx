@@ -48,7 +48,7 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
   const [ankiState, ankiAction, isPending] = useActionState(addWordsFromArticle, initialAnkiState);
   const [selected, setSelected] = useState(() => new Set(article.words.map((word) => word.term)));
 
-  const allSelected = selected.size === article.words.length;
+  const isAllSelected = selected.size === article.words.length;
 
   function toggleWord(word: string) {
     setSelected((previous) => {
@@ -59,7 +59,7 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
   }
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(article.words.map((word) => word.term)));
+    setSelected(isAllSelected ? new Set() : new Set(article.words.map((word) => word.term)));
   }
 
   return (
@@ -73,7 +73,7 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
           onClick={toggleAll}
           className="shrink-0 text-xs font-medium text-muted transition-colors hover:text-foreground"
         >
-          {allSelected ? "Clear all" : "Select all"}
+          {isAllSelected ? "Clear all" : "Select all"}
         </button>
       </div>
 
