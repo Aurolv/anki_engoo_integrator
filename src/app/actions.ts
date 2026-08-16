@@ -16,7 +16,7 @@ export async function importArticle(_previous: ImportState, formData: FormData):
   try {
     return { status: "success", article: await scrapeArticle(url) };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch the article";
+    const message = Error.isError(error) ? error.message : "Failed to fetch the article";
     return { status: "error", message };
   }
 }

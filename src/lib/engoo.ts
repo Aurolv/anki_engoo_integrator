@@ -51,10 +51,10 @@ export interface EngooWord {
   audioUrl: string | null;
 }
 
-export interface EngooArticle {
+export type EngooArticle = {
   title: string;
   words: EngooWord[];
-}
+};
 
 interface ApiWord {
   word?: string;
