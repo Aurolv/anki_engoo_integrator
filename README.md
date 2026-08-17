@@ -1,5 +1,6 @@
 # Engoo → Anki
 
+[![CI](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 
@@ -9,7 +10,7 @@ Turns an [Engoo Daily News](https://engoo.com/app/daily-news) article into Anki 
 
 ## Requirements
 
-- Node.js `^20.19` or `>=22.12`
+- Node.js 24 or newer
 - Anki desktop with the **AnkiConnect** add-on (*Tools → Add-ons → Get Add-ons*, code `2055492159`, then restart)
 
 Anki must stay open while you use the app AnkiConnect runs inside it.
