@@ -70,6 +70,8 @@ Non-obvious constraints in both API clients are documented as comments at the to
 | `npm run build` | Production build |
 | `npm start` | Serve the production build |
 | `npm run lint` | Run ESLint |
+| `npm test` | Run the test suite |
+| `npm run test:watch` | Re-run tests on change |
 
 ## Contributing
 
