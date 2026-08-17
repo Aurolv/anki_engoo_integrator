@@ -63,7 +63,9 @@ async function ensureModelExists(): Promise<void> {
 }
 
 async function storeAudio(audioUrl: string): Promise<string> {
-  const filename = new URL(audioUrl).pathname.split("/").pop()!;
+  const filename = new URL(audioUrl).pathname.split("/").pop();
+  if (!filename) throw new Error(`Audio URL contains no filename: ${audioUrl}`);
+
   return client.media.storeMediaFile({ filename, url: audioUrl });
 }
 
