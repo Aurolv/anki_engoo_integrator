@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { AlertCircle, Check, Loader2, Plus, Volume2 } from "lucide-react";
+import { Alert, Check, Plus, Speaker, Spinner } from "@/app/components/icons";
 import {
   addWordsFromArticle,
   fetchArticle,
@@ -12,6 +12,11 @@ import type { EngooArticle, EngooWord } from "@/lib/engoo";
 
 const initialFetchState: FetchState = { status: "idle" };
 const initialAnkiState: AnkiState = { status: "idle" };
+
+const FOCUS_RING =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
+const EASE = "duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]";
 
 export default function ArticleForm() {
   const [state, formAction, isPending] = useActionState(fetchArticle, initialFetchState);
@@ -24,20 +29,21 @@ export default function ArticleForm() {
           name="url"
           required
           placeholder="https://engoo.com/app/daily-news/article/…"
-          className="flex-1 rounded-xl border border-border bg-transparent px-4 py-2.5 text-sm outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/20"
+          className={`min-w-0 flex-1 rounded-md border border-border bg-card px-3.5 py-2.5 font-mono text-[0.8125rem] shadow-raised outline-none transition-colors placeholder:text-muted focus:border-accent ${FOCUS_RING}`}
         />
         <button
           type="submit"
           disabled={isPending}
-          className="flex items-center gap-2 rounded-xl bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          className={`flex shrink-0 items-center gap-2 rounded-md bg-foreground px-5 py-2.5 text-sm font-medium text-background transition-[opacity,transform] hover:opacity-85 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 ${EASE} ${FOCUS_RING}`}
         >
-          {isPending && <Loader2 className="size-4 animate-spin" />}
+          {isPending && <Spinner className="size-4 animate-spin" />}
           {isPending ? "Fetching…" : "Fetch"}
         </button>
       </form>
 
-      {state.status === "error" && <ErrorMessage message={state.message} />}
-      {state.status === "success" && (
+      {isPending && <ArticleSkeleton />}
+      {!isPending && state.status === "error" && <ErrorMessage message={state.message} />}
+      {!isPending && state.status === "success" && (
         <ArticleResult key={state.url} url={state.url} article={state.article} />
       )}
     </div>
@@ -62,16 +68,31 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
     setSelected(isAllSelected ? new Set() : new Set(article.words.map((word) => word.term)));
   }
 
+  // Engoo publishes some lessons with no vocabulary section at all.
+  if (article.words.length === 0) {
+    return (
+      <section className="animate-rise mt-16">
+        <ArticleTitle>{article.title}</ArticleTitle>
+        <div className="mt-6 rounded-xl border border-dashed border-border px-6 py-14 text-center">
+          <p className="text-sm font-medium">No vocabulary in this lesson</p>
+          <p className="mx-auto mt-1.5 max-w-[45ch] text-sm text-pretty text-muted">
+            Some Daily News articles ship without a vocabulary section. Try another lesson.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <form action={ankiAction} className="mt-10">
+    <form action={ankiAction} className="animate-rise mt-16">
       <input type="hidden" name="url" value={url} />
 
-      <div className="flex items-baseline justify-between gap-4">
-        <h2 className="text-lg font-semibold tracking-tight">{article.title}</h2>
+      <div className="flex items-baseline justify-between gap-4 border-b border-border pb-4">
+        <ArticleTitle>{article.title}</ArticleTitle>
         <button
           type="button"
           onClick={toggleAll}
-          className="shrink-0 text-xs font-medium text-muted transition-colors hover:text-foreground"
+          className={`shrink-0 rounded px-1.5 py-1 text-xs text-muted transition-colors hover:text-foreground ${FOCUS_RING}`}
         >
           {isAllSelected ? "Clear all" : "Select all"}
         </button>
@@ -80,10 +101,16 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
       <button
         type="submit"
         disabled={isPending || selected.size === 0}
-        className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+        className={`mt-6 flex w-full items-center justify-center gap-2 rounded-md border border-accent/25 bg-accent-wash px-5 py-2.5 text-sm font-medium text-accent transition-[background-color,transform] hover:border-accent/40 active:scale-[0.99] disabled:opacity-50 disabled:active:scale-100 ${EASE} ${FOCUS_RING}`}
       >
-        {isPending ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-        {isPending ? "Adding to Anki…" : `Add ${selected.size} to Anki`}
+        {isPending ? <Spinner className="size-4 animate-spin" /> : <Plus className="size-4" />}
+        {isPending ? (
+          "Adding to Anki…"
+        ) : (
+          <span>
+            Add <span className="tabular-nums">{selected.size}</span> to Anki
+          </span>
+        )}
       </button>
 
       {ankiState.status === "error" && <ErrorMessage message={ankiState.message} />}
@@ -91,16 +118,24 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
       {ankiState.status === "success" && (
         <p className="mt-3 flex items-center gap-2 text-sm text-muted">
           <Check className="size-4 shrink-0 text-accent" />
-          Added {ankiState.added} {ankiState.added === 1 ? "card" : "cards"}
-          {ankiState.duplicates > 0 && `, ${ankiState.duplicates} already in Anki`}
+          <span>
+            Added <span className="tabular-nums text-foreground">{ankiState.added}</span>{" "}
+            {ankiState.added === 1 ? "card" : "cards"}
+            {ankiState.duplicates > 0 && (
+              <>
+                , <span className="tabular-nums">{ankiState.duplicates}</span> already in Anki
+              </>
+            )}
+          </span>
         </p>
       )}
 
-      <ul className="mt-5 space-y-3">
-        {article.words.map((word) => (
+      <ul className="mt-6 space-y-2.5">
+        {article.words.map((word, index) => (
           <WordCard
             key={word.term}
             word={word}
+            index={index}
             checked={selected.has(word.term)}
             onToggle={() => toggleWord(word.term)}
           />
@@ -110,22 +145,35 @@ function ArticleResult({ url, article }: { url: string; article: EngooArticle })
   );
 }
 
+function ArticleTitle({ children }: { children: string }) {
+  return (
+    <h2 className="font-serif text-2xl leading-[1.15] tracking-[-0.02em] text-balance sm:text-3xl">
+      {children}
+    </h2>
+  );
+}
+
 function WordCard({
   word,
+  index,
   checked,
   onToggle,
 }: {
   word: EngooWord;
+  index: number;
   checked: boolean;
   onToggle: () => void;
 }) {
+  const { audioUrl } = word;
+
   return (
     <li
-      className={`rounded-xl border p-4 transition-colors ${
-        checked ? "border-accent/40 bg-card" : "border-border bg-transparent opacity-60"
+      className={`animate-rise rounded-xl border p-5 transition-[background-color,border-color,box-shadow,opacity] ${EASE} ${
+        checked ? "border-border bg-card shadow-raised" : "border-border/60 bg-transparent"
       }`}
+      style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <input
           type="checkbox"
           name="word"
@@ -133,26 +181,26 @@ function WordCard({
           checked={checked}
           onChange={onToggle}
           aria-label={`Include ${word.term}`}
-          className="size-4 shrink-0 accent-accent"
+          className={`size-4 shrink-0 rounded accent-accent ${FOCUS_RING}`}
         />
-        <span className="font-semibold">{word.term}</span>
-        <span className="rounded-full bg-muted/10 px-2 py-0.5 text-xs uppercase tracking-wide text-muted">
-          {word.partOfSpeech}
+        <span className={`font-medium ${checked ? "" : "text-muted"}`}>{word.term}</span>
+        <span className="font-serif text-sm italic text-muted">
+          {word.partOfSpeech.toLowerCase()}
         </span>
-        {word.audioUrl && (
+        {audioUrl && (
           <button
             type="button"
-            onClick={() => new Audio(word.audioUrl!).play()}
+            onClick={() => void new Audio(audioUrl).play().catch(() => {})}
             aria-label={`Play pronunciation of ${word.term}`}
-            className="ml-auto rounded-full p-1.5 text-muted transition-colors hover:bg-border/60 hover:text-foreground"
+            className={`ml-auto rounded p-1.5 text-muted transition-colors hover:bg-border/60 hover:text-foreground active:scale-95 ${FOCUS_RING}`}
           >
-            <Volume2 className="size-4" />
+            <Speaker className="size-4" />
           </button>
         )}
       </div>
-      <p className="mt-2 text-sm">{word.definition}</p>
+      <p className="mt-2.5 text-sm text-pretty">{word.definition}</p>
       {word.example && (
-        <p className="mt-2 border-l-2 border-border pl-3 text-sm italic text-muted">
+        <p className="mt-3 border-l border-accent/40 pl-3.5 font-serif text-[0.9375rem] italic text-pretty text-muted">
           {word.example}
         </p>
       )}
@@ -160,10 +208,39 @@ function WordCard({
   );
 }
 
+function ArticleSkeleton() {
+  return (
+    <div className="mt-16" role="status" aria-label="Loading article vocabulary">
+      <div className="h-8 w-2/3 animate-pulse rounded bg-border" />
+      <div className="mt-6 h-11 w-full animate-pulse rounded-md bg-border/70" />
+      <ul className="mt-6 space-y-2.5">
+        {[0, 1, 2].map((index) => (
+          <li
+            key={index}
+            className="animate-pulse rounded-xl border border-border/60 p-5"
+            style={{ animationDelay: `${index * 120}ms` }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="size-4 shrink-0 rounded bg-border" />
+              <div className="h-4 w-28 rounded bg-border" />
+              <div className="h-3 w-12 rounded bg-border/70" />
+            </div>
+            <div className="mt-3.5 h-3.5 w-full rounded bg-border/70" />
+            <div className="mt-2 h-3.5 w-4/5 rounded bg-border/70" />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ErrorMessage({ message }: { message: string }) {
   return (
-    <p className="mt-4 flex items-center gap-2 rounded-lg border border-danger/20 bg-danger/10 px-3 py-2 text-sm text-danger">
-      <AlertCircle className="size-4 shrink-0" />
+    <p
+      role="alert"
+      className="animate-rise mt-4 flex items-start gap-2 rounded-md border border-danger/20 bg-danger/8 px-3.5 py-2.5 text-sm text-pretty text-danger"
+    >
+      <Alert className="mt-0.5 size-4 shrink-0" />
       {message}
     </p>
   );
